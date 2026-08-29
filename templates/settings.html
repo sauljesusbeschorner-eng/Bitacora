@@ -5,26 +5,58 @@
 <div class="card">
   <h2 style="margin-bottom:6px">Configuración de tu bitácora</h2>
   <p class="subtitle" style="margin-bottom:18px">Estos parámetros los usa el cálculo de métricas. Cambiarlos no borra tus operaciones ya cargadas, pero sí recalcula el balance desde el principio con los valores nuevos.</p>
-  <form method="post">
+  <form method="post" id="settings-form">
     <div class="field">
       <label for="capital_inicial">Capital inicial ($)</label>
       <input type="number" step="0.01" min="0" id="capital_inicial" name="capital_inicial" value="{{ user.capital_inicial }}" required>
     </div>
-    <div class="field-row">
+
+    <div class="field">
+      <label for="calc_mode">Cómo calculás el resultado de tus operaciones</label>
+      <select id="calc_mode" name="calc_mode" onchange="actualizarModoCalculo()">
+        <option value="pct" {{ "selected" if user.calc_mode == "pct" else "" }}>Porcentaje fijo de mi balance (compuesto)</option>
+        <option value="fixed" {{ "selected" if user.calc_mode == "fixed" else "" }}>Monto fijo de riesgo en $ (no compone)</option>
+        <option value="direct" {{ "selected" if user.calc_mode == "direct" else "" }}>Cargo el P&amp;L real en $ de cada operación</option>
+      </select>
+    </div>
+
+    <div class="field" id="campo-riesgo-pct">
+      <label for="riesgo_pct">Riesgo por operación (%)</label>
+      <input type="number" step="0.01" min="0.1" max="100" id="riesgo_pct" name="riesgo_pct" value="{{ (user.riesgo_pct * 100) | round(2) }}">
+    </div>
+
+    <div class="field" id="campo-riesgo-fijo">
+      <label for="riesgo_fijo">Riesgo fijo por operación ($)</label>
+      <input type="number" step="0.01" min="0.01" id="riesgo_fijo" name="riesgo_fijo" value="{{ user.riesgo_fijo }}">
+    </div>
+
+    <div class="field-row" id="campos-rr">
       <div class="field">
-        <label for="riesgo_pct">Riesgo por operación (%)</label>
-        <input type="number" step="0.01" min="0.1" max="100" id="riesgo_pct" name="riesgo_pct" value="{{ (user.riesgo_pct * 100) | round(2) }}" required>
-      </div>
-      <div class="field">
-        <label for="rr">Relación TP (1:R)</label>
-        <input type="number" step="0.1" min="0.1" id="rr" name="rr" value="{{ user.rr }}" required>
+        <label for="rr">Relación TP por defecto (1:R)</label>
+        <input type="number" step="0.1" min="0.1" id="rr" name="rr" value="{{ user.rr }}">
       </div>
       <div class="field">
         <label for="be_trigger">Break-even en (1:R)</label>
-        <input type="number" step="0.1" min="0" id="be_trigger" name="be_trigger" value="{{ user.be_trigger }}" required>
+        <input type="number" step="0.1" min="0" id="be_trigger" name="be_trigger" value="{{ user.be_trigger }}">
       </div>
     </div>
+
+    <p class="subtitle" id="nota-direct" style="margin-top:-6px; margin-bottom:14px;">
+      En este modo cargás el resultado real en $ de cada operación al momento de registrarla — no hace falta definir riesgo ni relación TP, el sistema no calcula nada por vos.
+    </p>
+
     <button type="submit" style="width:100%">Guardar cambios</button>
   </form>
 </div>
+
+<script>
+function actualizarModoCalculo() {
+  var modo = document.getElementById('calc_mode').value;
+  document.getElementById('campo-riesgo-pct').style.display = (modo === 'pct') ? '' : 'none';
+  document.getElementById('campo-riesgo-fijo').style.display = (modo === 'fixed') ? '' : 'none';
+  document.getElementById('campos-rr').style.display = (modo === 'direct') ? 'none' : '';
+  document.getElementById('nota-direct').style.display = (modo === 'direct') ? '' : 'none';
+}
+actualizarModoCalculo();
+</script>
 {% endblock %}
