@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}{{ "Pago recibido" if success else "Pago cancelado" }}{% endblock %}
+{% block wrapclass %}narrow{% endblock %}
+{% block content %}
+<div class="card" style="text-align:center; display:flex; flex-direction:column; align-items:center; gap:12px;">
+  {% if success %}
+    <span class="eyebrow">Listo</span>
+    <h2>¡Pago recibido!</h2>
+    <p class="subtitle">
+      {% if paid %}
+        Tu cuenta ya está activada. Podés empezar a cargar tus operaciones.
+      {% else %}
+        Estamos confirmando el pago con Stripe — puede tardar unos segundos. Si al entrar a tu bitácora todavía te pide pagar, esperá un momento y volvé a intentar.
+      {% endif %}
+    </p>
+    <a class="btn" href="{{ url_for('dashboard') }}">Ir a mi bitácora</a>
+  {% else %}
+    <span class="eyebrow">Cancelado</span>
+    <h2>El pago no se completó</h2>
+    <p class="subtitle">No te cobramos nada. Podés volver a intentarlo cuando quieras.</p>
+    <a class="btn" href="{{ url_for('paywall') }}">Volver a intentar</a>
+  {% endif %}
+</div>
+{% endblock %}
