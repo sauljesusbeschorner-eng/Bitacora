@@ -130,3 +130,10 @@ tr:last-child td { border-bottom: none; }
 
 .empty-row td { text-align: center; color: var(--ink-muted); font-family: "IBM Plex Sans", sans-serif; padding: 24px 10px; }
 footer.site { text-align: center; font-size: 12.5px; color: var(--ink-muted); padding: 32px 20px; }
+
+.chat-log { display: flex; flex-direction: column; gap: 12px; max-height: 520px; overflow-y: auto; padding-right: 4px; }
+.chat-bubble { max-width: 80%; padding: 10px 14px; border-radius: 12px; font-size: 14px; line-height: 1.5; white-space: pre-wrap; }
+.chat-bubble .chat-role { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-muted); margin-bottom: 4px; font-weight: 600; }
+.chat-user { align-self: flex-end; background: var(--series-1-soft); }
+.chat-ai { align-self: flex-start; background: var(--bg-surface-2); border: 1px solid var(--border); }
+@media (max-width: 640px) { .chat-bubble { max-width: 100%; } }
