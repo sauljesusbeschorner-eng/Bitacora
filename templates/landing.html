@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Inicio{% endblock %}
+{% block content %}
+<div class="hero">
+  <span class="eyebrow">Bitácora en vivo para traders</span>
+  <h1>Cargá tus operaciones. Mirá si tu estrategia realmente funciona.</h1>
+  <p>Registrá cada operación con su sesión, dirección, riesgo y resultado — el balance, el win rate, el drawdown y las rachas se recalculan solos. Nada de planillas.</p>
+  <div style="display:flex; gap:12px; margin-top:10px;">
+    {% if user %}
+      <a class="btn" href="{{ url_for('dashboard') }}">Ir a mi bitácora</a>
+    {% else %}
+      <a class="btn" href="{{ url_for('signup') }}">Crear cuenta gratis</a>
+      <a class="btn btn-secondary" href="{{ url_for('login') }}">Ya tengo cuenta</a>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card" style="text-align:center; display:flex; flex-direction:column; align-items:center; gap:10px;">
+  <span class="eyebrow">Acceso completo</span>
+  <div class="price-tag">${{ price_display }}<span class="period"> pago único · de por vida</span></div>
+  <p class="subtitle">Sin mensualidad. Pagás una vez y la bitácora es tuya para siempre: operaciones ilimitadas, métricas en vivo, y las mejoras que se vayan agregando.</p>
+</div>
+
+<div class="session-grid">
+  <div class="session-card">
+    <div class="name">Métricas automáticas</div>
+    <div class="subtitle" style="font-size:13px">Balance, win rate, profit factor, drawdown actual y máximo, mejor y peor racha — recalculado en cada operación.</div>
+  </div>
+  <div class="session-card">
+    <div class="name">Curva de balance</div>
+    <div class="subtitle" style="font-size:13px">Vas viendo la evolución real de tu cuenta operación por operación, no solo el número final.</div>
+  </div>
+  <div class="session-card">
+    <div class="name">Por sesión</div>
+    <div class="subtitle" style="font-size:13px">Desglose de resultados por sesión de mercado, para saber dónde de verdad te está rindiendo la estrategia.</div>
+  </div>
+</div>
+{% endblock %}
