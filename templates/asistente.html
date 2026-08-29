@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Asistente IA{% endblock %}
+{% block content %}
+
+<header>
+  <span class="eyebrow">Asistente de IA</span>
+  <h1 style="font-size:28px; margin-top:6px;">Charlá sobre tu propia bitácora</h1>
+  <p class="subtitle">Te responde en base a las métricas que ya cargaste en tu bitácora. No da señales de entrada ni consejos de inversión — es un espejo de tu propio historial.</p>
+</header>
+
+{% if not ai_configured %}
+<div class="card">
+  <p class="subtitle">El asistente todavía no está activado en esta cuenta. Falta configurar la clave de IA del lado del servidor.</p>
+</div>
+{% elif not has_ops %}
+<div class="card">
+  <p class="subtitle">Todavía no cargaste operaciones. Cargá al menos una en tu <a href="{{ url_for('dashboard') }}">bitácora</a> para que el asistente tenga algo que analizar.</p>
+</div>
+{% else %}
+
+<div class="card" style="display:flex; flex-direction:column; gap:14px;">
+  <div class="chat-log">
+    {% if not history %}
+    <p class="subtitle">Preguntale algo como "¿cómo vengo este mes?", "¿en qué etiqueta me va peor?" o "¿qué patrón ves en mis pérdidas?".</p>
+    {% endif %}
+    {% for msg in history %}
+    <div class="chat-bubble {{ 'chat-user' if msg.role == 'user' else 'chat-ai' }}">
+      <span class="chat-role">{{ 'Vos' if msg.role == 'user' else 'Asistente' }}</span>
+      <div class="chat-text">{{ msg.content }}</div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <form method="post" action="{{ url_for('asistente_mensaje') }}" style="display:flex; gap:10px;">
+    <input type="text" name="mensaje" placeholder="Escribí tu pregunta..." required style="flex:1;" autocomplete="off">
+    <button type="submit">Enviar</button>
+  </form>
+
+  {% if history %}
+  <form method="post" action="{{ url_for('asistente_limpiar') }}">
+    <button type="submit" class="btn-secondary" style="font-size:12px; padding:6px 12px;">Borrar conversación</button>
+  </form>
+  {% endif %}
+</div>
+{% endif %}
+
+{% endblock %}
