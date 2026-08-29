@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Crear cuenta{% endblock %}
+{% block wrapclass %}narrow{% endblock %}
+{% block content %}
+<div class="card">
+  <h2 style="margin-bottom:6px">Crear cuenta</h2>
+  <p class="subtitle" style="margin-bottom:18px">Un minuto y podés empezar a cargar tus operaciones.</p>
+  <form method="post">
+    <div class="field">
+      <label for="email">Email</label>
+      <input type="email" id="email" name="email" required autofocus>
+    </div>
+    <div class="field">
+      <label for="password">Contraseña</label>
+      <input type="password" id="password" name="password" minlength="8" required>
+    </div>
+    <button type="submit" style="width:100%">Crear cuenta</button>
+  </form>
+  <p class="subtitle" style="margin-top:14px; font-size:13px">¿Ya tenés cuenta? <a href="{{ url_for('login') }}">Ingresá acá</a>.</p>
+</div>
+{% endblock %}
