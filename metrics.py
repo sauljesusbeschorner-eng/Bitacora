@@ -1,31 +1,56 @@
 """
-Motor de cálculo de la bitácora — misma convención usada en toda la
-conversación con el trader:
+Motor de cálculo de la bitácora.
 
-  - Cualquier operación marcada BE cierra en $0, sin importar qué diga
-    después ("recorrido" es solo información extra, no cambia el P&L).
-  - TP paga 2x el riesgo (relación configurable, default 1:2).
-  - SL pierde 1x el riesgo.
-  - El riesgo de cada operación es un % del balance en ese momento
-    (compuesto), configurable por usuario.
+Soporta tres formas de calcular el resultado de cada operación, según
+la configuración de cada usuario (user["calc_mode"]):
+
+  - "pct":    el riesgo de cada operación es un % del balance en ese
+              momento (compuesto). El resultado se expresa en múltiplos
+              de R: si la operación no trae un r_multiple propio, se usa
+              +rr para TP, -1 para SL y 0 para BE (comportamiento
+              histórico, compatible con operaciones viejas).
+  - "fixed":  igual que "pct" pero el riesgo es un monto fijo en $ que
+              no cambia con el balance (no compone).
+  - "direct": no hay cálculo de riesgo en absoluto. El usuario carga el
+              P&L real en $ de cada operación (pnl_manual) y listo.
+
+En los modos "pct"/"fixed", cualquier operación puede traer su propio
+r_multiple (por ejemplo 1.8 para un cierre parcial, -0.3 para una
+salida anticipada) que pisa el TP/SL/BE fijo — así una sola estrategia
+de riesgo fijo no obliga a que todos los TP paguen exactamente lo mismo.
 """
 
 
-def simulate(operations, start_balance, risk_pct, rr):
+def simulate(operations, user):
     """operations: lista de dicts con session, direction, r_points,
-    result ('TP'/'SL'/'BE'), recorrido, op_date -- ordenadas cronológicamente.
+    result ('TP'/'SL'/'BE'), r_multiple, pnl_manual, recorrido, op_date
+    -- ordenadas cronológicamente.
+    user: dict/Row con capital_inicial, calc_mode, riesgo_pct,
+    riesgo_fijo, rr.
     Devuelve la misma lista enriquecida con risk/pnl/balance_before/after."""
-    bal = start_balance
+    bal = user["capital_inicial"]
+    mode = user["calc_mode"] if user["calc_mode"] else "pct"
     rows = []
     for i, o in enumerate(operations, start=1):
-        risk = round(bal * risk_pct, 2)
-        is_be = o["result"] == "BE"
-        if is_be:
-            pnl = 0.0
-        elif o["result"] == "TP":
-            pnl = round(risk * rr, 2)
-        else:  # SL
-            pnl = -risk
+        if mode == "direct":
+            pnl = round(o.get("pnl_manual") or 0.0, 2)
+            risk = None
+            is_be = pnl == 0
+        else:
+            if mode == "fixed":
+                risk = round(user["riesgo_fijo"], 2)
+            else:
+                risk = round(bal * user["riesgo_pct"], 2)
+            r_mult = o.get("r_multiple")
+            if r_mult is None:
+                if o["result"] == "BE":
+                    r_mult = 0.0
+                elif o["result"] == "TP":
+                    r_mult = user["rr"]
+                else:
+                    r_mult = -1.0
+            pnl = round(risk * r_mult, 2)
+            is_be = r_mult == 0
         before = bal
         bal = round(bal + pnl, 2)
         rows.append({
@@ -50,7 +75,7 @@ def compute_metrics(rows, start_balance):
         if r["is_be"]:
             scratches += 1
             cur_win = cur_loss = 0
-        elif r["result"] == "TP":
+        elif r["pnl"] > 0:
             wins += 1
             gross_win += r["pnl"]
             cur_win += 1
@@ -68,7 +93,7 @@ def compute_metrics(rows, start_balance):
     for r in reversed(rows):
         if r["is_be"]:
             break
-        t = "win" if r["result"] == "TP" else "loss"
+        t = "win" if r["pnl"] > 0 else "loss"
         if cur_streak_type is None:
             cur_streak_type, cur_streak = t, 1
         elif t == cur_streak_type:
@@ -89,15 +114,16 @@ def compute_metrics(rows, start_balance):
     pnl_total = final_bal - start_balance
     pf = (gross_win / gross_loss) if gross_loss > 0 else (float("inf") if gross_win > 0 else None)
 
-    sessions = {"Asia": {"n": 0, "w": 0, "l": 0, "be": 0},
-                "Londres": {"n": 0, "w": 0, "l": 0, "be": 0},
-                "NY": {"n": 0, "w": 0, "l": 0, "be": 0}}
+    # Las sesiones/etiquetas ahora son libres: se arman a partir de lo
+    # que el usuario haya cargado, no de una lista fija.
+    sessions = {}
     for r in rows:
-        s = sessions.setdefault(r["session"], {"n": 0, "w": 0, "l": 0, "be": 0})
+        tag = r["session"] or "Sin etiqueta"
+        s = sessions.setdefault(tag, {"n": 0, "w": 0, "l": 0, "be": 0})
         s["n"] += 1
         if r["is_be"]:
             s["be"] += 1
-        elif r["result"] == "TP":
+        elif r["pnl"] > 0:
             s["w"] += 1
         else:
             s["l"] += 1
