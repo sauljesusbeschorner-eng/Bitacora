@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+{% block title %}Bitácora{% endblock %}
+{% block content %}
+
+<header>
+  <span class="eyebrow">Bitácora en vivo</span>
+  <h1 style="font-size:28px; margin-top:6px;">Tu registro de operaciones</h1>
+</header>
+
+<div class="kpi-grid">
+  <div class="kpi">
+    <span class="label">Balance actual</span>
+    <span class="value tabular {{ 'good' if m.pnl_total > 0 else ('critical' if m.pnl_total < 0 else '') }}">${{ "%.2f"|format(m.final_balance) }}</span>
+    <span class="sub">{% if m.n %}{{ "+" if m.pnl_total >= 0 else "" }}${{ "%.2f"|format(m.pnl_total) }} ({{ "+" if m.pnl_pct >= 0 else "" }}{{ "%.1f"|format(m.pnl_pct) }}%){% else %}sin operaciones aún{% endif %}</span>
+  </div>
+  <div class="kpi">
+    <span class="label">Operaciones</span>
+    <span class="value tabular">{{ m.n }}</span>
+    <span class="sub">{{ m.wins }}G · {{ m.losses }}P · {{ m.scratches }}BE</span>
+  </div>
+  <div class="kpi">
+    <span class="label">Win rate</span>
+    <span class="value tabular">{{ "%.1f"|format(m.win_rate) + "%" if m.win_rate is not none else "—" }}</span>
+    <span class="sub">{% if m.n %}sobre {{ m.n }} operaciones{% else %}—{% endif %}</span>
+  </div>
+  <div class="kpi">
+    <span class="label">Profit factor</span>
+    <span class="value tabular">{% if m.pf is none %}—{% elif m.pf == m.pf and m.pf > 1000000 %}∞{% else %}{{ "%.2f"|format(m.pf) }}{% endif %}</span>
+    <span class="sub">ganancia bruta / pérdida bruta</span>
+  </div>
+  <div class="kpi">
+    <span class="label">Drawdown actual</span>
+    <span class="value tabular {{ 'critical' if m.cur_dd > 0 else '' }}">{{ "%.1f"|format(m.cur_dd) }}%</span>
+    <span class="sub">desde el último máximo</span>
+  </div>
+  <div class="kpi">
+    <span class="label">Drawdown máximo</span>
+    <span class="value tabular">{{ "%.1f"|format(m.max_dd) }}%</span>
+    <span class="sub">peor caída registrada</span>
+  </div>
+  <div class="kpi">
+    <span class="label">Mejor racha (TP)</span>
+    <span class="value tabular good">{{ m.best_win or "—" }}</span>
+    <span class="sub">ganadoras seguidas</span>
+  </div>
+  <div class="kpi">
+    <span class="label">Peor racha (SL)</span>
+    <span class="value tabular critical">{{ m.worst_loss or "—" }}</span>
+    <span class="sub">perdedoras seguidas</span>
+  </div>
+</div>
+
+<div class="card">
+  <div class="section-title">
+    <h2>Curva de balance</h2>
+    <span class="meta">{% if m.n %}{{ m.n }} operaciones · ${{ "%.2f"|format(capital_inicial) }} → ${{ "%.2f"|format(m.final_balance) }}{% else %}0 operaciones{% endif %}</span>
+  </div>
+  {% if chart %}
+  <svg class="equity" viewBox="0 0 {{ chart.W }} {{ chart.H }}" preserveAspectRatio="none">
+    {% for x1, x2, y, label in chart.grid %}
+      <line class="grid-line" x1="{{ x1 }}" x2="{{ x2 }}" y1="{{ y }}" y2="{{ y }}" />
+      <text class="axis-label" x="{{ chart.pad_l - 8 }}" y="{{ y + 3 }}" text-anchor="end">{{ label }}</text>
+    {% endfor %}
+    <line class="baseline" x1="{{ chart.pad_l }}" x2="{{ chart.W - 16 }}" y1="{{ chart.base_y }}" y2="{{ chart.base_y }}" />
+    <polygon class="area-fill" points="{{ chart.area_pts }}"></polygon>
+    <polyline class="equity-line" points="{{ chart.line_pts }}"></polyline>
+    {% for cx, cy in chart.dots %}
+      <circle class="equity-dot" cx="{{ cx }}" cy="{{ cy }}" r="3"></circle>
+    {% endfor %}
+  </svg>
+  {% else %}
+  <div style="height:180px; display:flex; align-items:center; justify-content:center; color:var(--ink-muted); border:1px dashed var(--border-strong); border-radius:12px; margin-top:10px;">
+    Todavía no hay operaciones registradas.
+  </div>
+  {% endif %}
+</div>
+
+<div class="card">
+  <div class="section-title"><h2>Por sesión</h2></div>
+  <div class="session-grid">
+    {% for name, s in m.sessions.items() %}
+    <div class="session-card">
+      <div class="name">{{ name }}</div>
+      <div class="stats">
+        <span>{{ s.n }} ops</span>
+        <span class="pnl-pos">{{ s.w }}G</span>
+        <span class="pnl-neg">{{ s.l }}P</span>
+        <span class="pnl-zero">{{ s.be }}BE</span>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="card">
+  <div class="section-title"><h2>Cargar operación nueva</h2></div>
+  <form method="post" action="{{ url_for('add_operation') }}">
+    <div class="field-row">
+      <div class="field">
+        <label for="op_date">Fecha</label>
+        <input type="date" id="op_date" name="op_date">
+      </div>
+      <div class="field">
+        <label for="session">Sesión</label>
+        <select id="session" name="session" required>
+          <option value="Asia">Asia</option>
+          <option value="Londres">Londres</option>
+          <option value="NY">NY</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="direction">Dirección</label>
+        <select id="direction" name="direction">
+          <option value="Compra">Compra</option>
+          <option value="Venta">Venta</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="r_points">R (puntos)</label>
+        <input type="number" step="any" id="r_points" name="r_points" placeholder="ej: 132">
+      </div>
+      <div class="field">
+        <label for="result">Resultado</label>
+        <select id="result" name="result" required>
+          <option value="TP">TP</option>
+          <option value="SL">SL</option>
+          <option value="BE">BE</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="recorrido">Recorrido</label>
+        <input type="text" id="recorrido" name="recorrido" placeholder="ej: 1:1,83">
+      </div>
+    </div>
+    <button type="submit">Agregar operación</button>
+  </form>
+</div>
+
+<div class="card">
+  <div class="section-title">
+    <h2>Operación por operación</h2>
+    <span class="meta">{{ m.n }} registradas</span>
+  </div>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>#</th><th class="txt">Fecha</th><th class="txt">Sesión</th><th class="txt">Dirección</th>
+          <th>R (pts)</th><th>Resultado</th><th>Recorrido</th><th>Riesgo</th><th>P&amp;L</th><th>Balance</th><th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if not rows %}
+        <tr class="empty-row"><td colspan="11">Cargá tu primera operación arriba.</td></tr>
+        {% endif %}
+        {% for r in rows %}
+        <tr>
+          <td class="tabular">{{ r.idx }}</td>
+          <td class="txt">{{ r.op_date or "—" }}</td>
+          <td class="txt">{{ r.session }}</td>
+          <td class="txt">{{ r.direction or "—" }}</td>
+          <td class="tabular">{{ r.r_points if r.r_points is not none else "—" }}</td>
+          <td><span class="badge {{ 'be' if r.is_be else ('tp' if r.result == 'TP' else 'sl') }}">{{ 'BE' if r.is_be else r.result }}</span></td>
+          <td class="tabular">{{ r.recorrido or "—" }}</td>
+          <td class="tabular">${{ "%.2f"|format(r.risk) }}</td>
+          <td class="tabular {{ 'pnl-pos' if r.pnl > 0 else ('pnl-neg' if r.pnl < 0 else 'pnl-zero') }}">{{ "+" if r.pnl >= 0 else "" }}${{ "%.2f"|format(r.pnl) }}</td>
+          <td class="tabular" style="font-weight:600">${{ "%.2f"|format(r.balance_after) }}</td>
+          <td>
+            <form method="post" action="{{ url_for('delete_operation', op_id=r.id) }}" onsubmit="return confirm('¿Borrar esta operación?');">
+              <button type="submit" class="btn-danger" style="padding:5px 10px; font-size:12px;">Borrar</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% endblock %}
