@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Bitácora{% endblock %} · Bitácora Trader</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <nav class="nav">
+    <a class="brand" href="{{ url_for('landing') }}">🪙 Bitácora Trader</a>
+    <div class="links">
+      {% if user %}
+        <a href="{{ url_for('dashboard') }}">Bitácora</a>
+        <a href="{{ url_for('settings') }}">Configuración</a>
+        <a href="{{ url_for('logout') }}">Salir</a>
+      {% else %}
+        <a href="{{ url_for('login') }}">Ingresar</a>
+        <a class="btn" href="{{ url_for('signup') }}">Crear cuenta</a>
+      {% endif %}
+    </div>
+  </nav>
+
+  <div class="wrap {% block wrapclass %}{% endblock %}">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="flash {{ category }}">{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+    {% block content %}{% endblock %}
+  </div>
+
+  <footer class="site">Bitácora Trader · registro de operaciones y métricas en vivo</footer>
+</body>
+</html>
