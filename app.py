@@ -4,6 +4,7 @@ import os
 from flask import Flask, flash, g, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
 
+import ai_client
 import db
 import metrics
 import stripe_client
@@ -197,13 +198,15 @@ def stripe_webhook():
 @paid_required
 def dashboard():
     ops = db.list_operations(g.user["id"])
-    rows = metrics.simulate(ops, g.user["capital_inicial"], g.user["riesgo_pct"], g.user["rr"])
+    rows = metrics.simulate(ops, g.user)
     m = metrics.compute_metrics(rows, g.user["capital_inicial"])
     chart = build_chart_svg(rows, g.user["capital_inicial"])
+    tags = db.list_tags(g.user["id"])
     return render_template(
         "dashboard.html", rows=list(reversed(rows)), m=m, chart=chart,
-        capital_inicial=g.user["capital_inicial"], riesgo_pct=g.user["riesgo_pct"],
-        rr=g.user["rr"], be_trigger=g.user["be_trigger"],
+        capital_inicial=g.user["capital_inicial"], calc_mode=g.user["calc_mode"],
+        riesgo_pct=g.user["riesgo_pct"], riesgo_fijo=g.user["riesgo_fijo"],
+        rr=g.user["rr"], be_trigger=g.user["be_trigger"], tags=tags,
     )
 
 
@@ -212,22 +215,53 @@ def dashboard():
 @paid_required
 def add_operation():
     f = request.form
-    result = f.get("result", "").upper()
-    if result not in ("TP", "SL", "BE"):
-        flash("Resultado inválido.", "error")
+    calc_mode = g.user["calc_mode"]
+
+    session_tag = (f.get("session") or "").strip()
+    if not session_tag:
+        flash("Ingresá una sesión o etiqueta para la operación.", "error")
         return redirect(url_for("dashboard"))
+
     r_points = f.get("r_points") or None
     try:
         r_points = float(r_points) if r_points else None
     except ValueError:
         r_points = None
+
+    r_multiple = None
+    pnl_manual = None
+
+    if calc_mode == "direct":
+        raw = (f.get("pnl_manual") or "").strip().replace(",", ".")
+        try:
+            pnl_manual = float(raw)
+        except ValueError:
+            flash("Ingresá el resultado en $ de la operación.", "error")
+            return redirect(url_for("dashboard"))
+        result = "BE" if pnl_manual == 0 else ("TP" if pnl_manual > 0 else "SL")
+    else:
+        result = f.get("result", "").upper()
+        if result not in ("TP", "SL", "BE"):
+            flash("Resultado inválido.", "error")
+            return redirect(url_for("dashboard"))
+        raw = (f.get("r_multiple") or "").strip().replace(",", ".")
+        if raw:
+            try:
+                r_multiple = float(raw)
+            except ValueError:
+                flash("El valor de R personalizado no es válido.", "error")
+                return redirect(url_for("dashboard"))
+            result = "BE" if r_multiple == 0 else ("TP" if r_multiple > 0 else "SL")
+
     db.add_operation(
         g.user["id"],
         f.get("op_date") or None,
-        f.get("session"),
+        session_tag,
         f.get("direction") or None,
         r_points,
         result,
+        r_multiple,
+        pnl_manual,
         f.get("recorrido") or None,
     )
     return redirect(url_for("dashboard"))
@@ -248,18 +282,81 @@ def settings():
     if request.method == "POST":
         try:
             capital = float(request.form["capital_inicial"])
-            riesgo_pct = float(request.form["riesgo_pct"]) / 100.0
-            rr = float(request.form["rr"])
-            be_trigger = float(request.form["be_trigger"])
-            if capital <= 0 or not (0 < riesgo_pct <= 1) or rr <= 0 or be_trigger < 0:
+            calc_mode = request.form.get("calc_mode", "pct")
+            if calc_mode not in ("pct", "fixed", "direct"):
+                raise ValueError
+            riesgo_pct = float(request.form.get("riesgo_pct") or 0) / 100.0
+            riesgo_fijo = float(request.form.get("riesgo_fijo") or 0)
+            rr = float(request.form.get("rr") or 0)
+            be_trigger = float(request.form.get("be_trigger") or 0)
+            if capital <= 0:
+                raise ValueError
+            if calc_mode == "pct" and not (0 < riesgo_pct <= 1):
+                raise ValueError
+            if calc_mode == "fixed" and riesgo_fijo <= 0:
+                raise ValueError
+            if calc_mode in ("pct", "fixed") and (rr <= 0 or be_trigger < 0):
                 raise ValueError
         except (KeyError, ValueError):
             flash("Revisá los valores ingresados.", "error")
             return render_template("settings.html")
-        db.update_settings(g.user["id"], capital, riesgo_pct, rr, be_trigger)
+        db.update_settings(g.user["id"], capital, calc_mode, riesgo_pct, riesgo_fijo, rr, be_trigger)
         flash("Configuración guardada.", "success")
         return redirect(url_for("settings"))
     return render_template("settings.html")
+
+
+# ------------------------------------------------------------ asistente --
+@app.route("/asistente")
+@login_required
+@paid_required
+def asistente():
+    ops = db.list_operations(g.user["id"])
+    rows = metrics.simulate(ops, g.user)
+    history = db.list_chat_messages(g.user["id"])
+    ai_configured = bool(os.environ.get("ANTHROPIC_API_KEY"))
+    return render_template(
+        "asistente.html", history=history, ai_configured=ai_configured, has_ops=bool(rows),
+    )
+
+
+@app.route("/asistente/mensaje", methods=["POST"])
+@login_required
+@paid_required
+def asistente_mensaje():
+    texto = (request.form.get("mensaje") or "").strip()
+    if not texto:
+        return redirect(url_for("asistente"))
+
+    ops = db.list_operations(g.user["id"])
+    rows = metrics.simulate(ops, g.user)
+    if not rows:
+        flash("Cargá al menos una operación antes de usar el asistente.", "error")
+        return redirect(url_for("asistente"))
+    m = metrics.compute_metrics(rows, g.user["capital_inicial"])
+    context_summary = ai_client.build_context_summary(g.user, m)
+
+    history = db.list_chat_messages(g.user["id"])
+    api_messages = [{"role": h["role"], "content": h["content"]} for h in history]
+    api_messages.append({"role": "user", "content": texto})
+
+    try:
+        reply = ai_client.chat(api_messages, context_summary)
+    except ai_client.AIError as e:
+        flash(str(e), "error")
+        return redirect(url_for("asistente"))
+
+    db.add_chat_message(g.user["id"], "user", texto)
+    db.add_chat_message(g.user["id"], "assistant", reply)
+    return redirect(url_for("asistente"))
+
+
+@app.route("/asistente/limpiar", methods=["POST"])
+@login_required
+@paid_required
+def asistente_limpiar():
+    db.clear_chat(g.user["id"])
+    return redirect(url_for("asistente"))
 
 
 # --------------------------------------------------------- equity chart --
