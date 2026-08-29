@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Activar acceso{% endblock %}
+{% block wrapclass %}narrow{% endblock %}
+{% block content %}
+<div class="card" style="text-align:center; display:flex; flex-direction:column; align-items:center; gap:12px;">
+  <span class="eyebrow">Un paso más</span>
+  <h2>Activá tu acceso de por vida</h2>
+  <div class="price-tag">${{ price_display }}<span class="period"> pago único</span></div>
+  <p class="subtitle">Pagás una sola vez con tarjeta (procesado de forma segura por Stripe) y tu cuenta queda activada al instante.</p>
+  <form method="post" action="{{ url_for('create_checkout') }}" style="width:100%">
+    <button type="submit" style="width:100%">Pagar y activar mi cuenta</button>
+  </form>
+</div>
+{% endblock %}
