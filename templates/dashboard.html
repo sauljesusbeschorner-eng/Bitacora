@@ -39,12 +39,12 @@
     <span class="sub">peor caída registrada</span>
   </div>
   <div class="kpi">
-    <span class="label">Mejor racha (TP)</span>
+    <span class="label">Mejor racha (ganadoras)</span>
     <span class="value tabular good">{{ m.best_win or "—" }}</span>
     <span class="sub">ganadoras seguidas</span>
   </div>
   <div class="kpi">
-    <span class="label">Peor racha (SL)</span>
+    <span class="label">Peor racha (perdedoras)</span>
     <span class="value tabular critical">{{ m.worst_loss or "—" }}</span>
     <span class="sub">perdedoras seguidas</span>
   </div>
@@ -76,7 +76,8 @@
 </div>
 
 <div class="card">
-  <div class="section-title"><h2>Por sesión</h2></div>
+  <div class="section-title"><h2>Por sesión / etiqueta</h2></div>
+  {% if m.sessions %}
   <div class="session-grid">
     {% for name, s in m.sessions.items() %}
     <div class="session-card">
@@ -90,6 +91,9 @@
     </div>
     {% endfor %}
   </div>
+  {% else %}
+  <p class="subtitle" style="margin-top:10px;">Todavía no hay operaciones agrupadas por etiqueta.</p>
+  {% endif %}
 </div>
 
 <div class="card">
@@ -101,12 +105,13 @@
         <input type="date" id="op_date" name="op_date">
       </div>
       <div class="field">
-        <label for="session">Sesión</label>
-        <select id="session" name="session" required>
-          <option value="Asia">Asia</option>
-          <option value="Londres">Londres</option>
-          <option value="NY">NY</option>
-        </select>
+        <label for="session">Sesión / etiqueta</label>
+        <input type="text" id="session" name="session" list="tag-options" placeholder="ej: Londres, BTCUSD, Ruptura" required>
+        <datalist id="tag-options">
+          {% for tag in tags %}
+          <option value="{{ tag }}">
+          {% endfor %}
+        </datalist>
       </div>
       <div class="field">
         <label for="direction">Dirección</label>
@@ -119,6 +124,12 @@
         <label for="r_points">R (puntos)</label>
         <input type="number" step="any" id="r_points" name="r_points" placeholder="ej: 132">
       </div>
+      {% if calc_mode == "direct" %}
+      <div class="field">
+        <label for="pnl_manual">P&amp;L de la operación ($)</label>
+        <input type="number" step="any" id="pnl_manual" name="pnl_manual" placeholder="ej: -45.50" required>
+      </div>
+      {% else %}
       <div class="field">
         <label for="result">Resultado</label>
         <select id="result" name="result" required>
@@ -127,6 +138,11 @@
           <option value="BE">BE</option>
         </select>
       </div>
+      <div class="field">
+        <label for="r_multiple">R personalizado (opcional)</label>
+        <input type="number" step="any" id="r_multiple" name="r_multiple" placeholder="dejalo vacío para usar tu R:R">
+      </div>
+      {% endif %}
       <div class="field">
         <label for="recorrido">Recorrido</label>
         <input type="text" id="recorrido" name="recorrido" placeholder="ej: 1:1,83">
@@ -145,7 +161,7 @@
     <table>
       <thead>
         <tr>
-          <th>#</th><th class="txt">Fecha</th><th class="txt">Sesión</th><th class="txt">Dirección</th>
+          <th>#</th><th class="txt">Fecha</th><th class="txt">Sesión / etiqueta</th><th class="txt">Dirección</th>
           <th>R (pts)</th><th>Resultado</th><th>Recorrido</th><th>Riesgo</th><th>P&amp;L</th><th>Balance</th><th></th>
         </tr>
       </thead>
@@ -160,9 +176,9 @@
           <td class="txt">{{ r.session }}</td>
           <td class="txt">{{ r.direction or "—" }}</td>
           <td class="tabular">{{ r.r_points if r.r_points is not none else "—" }}</td>
-          <td><span class="badge {{ 'be' if r.is_be else ('tp' if r.result == 'TP' else 'sl') }}">{{ 'BE' if r.is_be else r.result }}</span></td>
+          <td><span class="badge {{ 'be' if r.is_be else ('tp' if r.pnl > 0 else 'sl') }}">{{ 'BE' if r.is_be else r.result }}</span></td>
           <td class="tabular">{{ r.recorrido or "—" }}</td>
-          <td class="tabular">${{ "%.2f"|format(r.risk) }}</td>
+          <td class="tabular">{{ "$%.2f"|format(r.risk) if r.risk is not none else "—" }}</td>
           <td class="tabular {{ 'pnl-pos' if r.pnl > 0 else ('pnl-neg' if r.pnl < 0 else 'pnl-zero') }}">{{ "+" if r.pnl >= 0 else "" }}${{ "%.2f"|format(r.pnl) }}</td>
           <td class="tabular" style="font-weight:600">${{ "%.2f"|format(r.balance_after) }}</td>
           <td>
