@@ -12,7 +12,9 @@ CREATE TABLE IF NOT EXISTS users (
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     has_lifetime_access INTEGER NOT NULL DEFAULT 0,
     capital_inicial REAL NOT NULL DEFAULT 1000,
+    calc_mode TEXT NOT NULL DEFAULT 'pct',
     riesgo_pct REAL NOT NULL DEFAULT 0.02,
+    riesgo_fijo REAL NOT NULL DEFAULT 100,
     rr REAL NOT NULL DEFAULT 2,
     be_trigger REAL NOT NULL DEFAULT 1
 );
@@ -25,6 +27,8 @@ CREATE TABLE IF NOT EXISTS operations (
     direction TEXT,
     r_points REAL,
     result TEXT NOT NULL,
+    r_multiple REAL,
+    pnl_manual REAL,
     recorrido TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -34,8 +38,33 @@ CREATE TABLE IF NOT EXISTS stripe_events (
     processed_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS chat_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    role TEXT NOT NULL,
+    content TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE INDEX IF NOT EXISTS idx_operations_user ON operations(user_id);
+CREATE INDEX IF NOT EXISTS idx_chat_user ON chat_messages(user_id);
 """
+
+
+def _migrate(conn):
+    """Agrega columnas nuevas a bases de datos que ya existían con el
+    esquema viejo, sin tocar los datos que ya tienen cargados."""
+    user_cols = {row["name"] for row in conn.execute("PRAGMA table_info(users)")}
+    if "calc_mode" not in user_cols:
+        conn.execute("ALTER TABLE users ADD COLUMN calc_mode TEXT NOT NULL DEFAULT 'pct'")
+    if "riesgo_fijo" not in user_cols:
+        conn.execute("ALTER TABLE users ADD COLUMN riesgo_fijo REAL NOT NULL DEFAULT 100")
+
+    op_cols = {row["name"] for row in conn.execute("PRAGMA table_info(operations)")}
+    if "r_multiple" not in op_cols:
+        conn.execute("ALTER TABLE operations ADD COLUMN r_multiple REAL")
+    if "pnl_manual" not in op_cols:
+        conn.execute("ALTER TABLE operations ADD COLUMN pnl_manual REAL")
 
 
 @contextmanager
@@ -53,6 +82,7 @@ def get_db():
 def init_db():
     with get_db() as conn:
         conn.executescript(SCHEMA)
+        _migrate(conn)
 
 
 def get_user_by_email(email):
@@ -81,11 +111,12 @@ def grant_lifetime_access(user_id):
         conn.execute("UPDATE users SET has_lifetime_access = 1 WHERE id = ?", (user_id,))
 
 
-def update_settings(user_id, capital_inicial, riesgo_pct, rr, be_trigger):
+def update_settings(user_id, capital_inicial, calc_mode, riesgo_pct, riesgo_fijo, rr, be_trigger):
     with get_db() as conn:
         conn.execute(
-            "UPDATE users SET capital_inicial=?, riesgo_pct=?, rr=?, be_trigger=? WHERE id=?",
-            (capital_inicial, riesgo_pct, rr, be_trigger, user_id),
+            """UPDATE users SET capital_inicial=?, calc_mode=?, riesgo_pct=?, riesgo_fijo=?,
+               rr=?, be_trigger=? WHERE id=?""",
+            (capital_inicial, calc_mode, riesgo_pct, riesgo_fijo, rr, be_trigger, user_id),
         )
 
 
@@ -97,12 +128,25 @@ def list_operations(user_id):
         return [dict(r) for r in rows]
 
 
-def add_operation(user_id, op_date, session, direction, r_points, result, recorrido):
+def list_tags(user_id):
+    """Etiquetas/sesiones que el usuario ya usó, para autocompletar."""
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT DISTINCT session FROM operations
+               WHERE user_id=? AND session IS NOT NULL AND TRIM(session) != ''
+               ORDER BY session COLLATE NOCASE""",
+            (user_id,),
+        ).fetchall()
+        return [r["session"] for r in rows]
+
+
+def add_operation(user_id, op_date, session, direction, r_points, result, r_multiple, pnl_manual, recorrido):
     with get_db() as conn:
         conn.execute(
-            """INSERT INTO operations (user_id, op_date, session, direction, r_points, result, recorrido)
-               VALUES (?,?,?,?,?,?,?)""",
-            (user_id, op_date, session, direction, r_points, result, recorrido),
+            """INSERT INTO operations
+               (user_id, op_date, session, direction, r_points, result, r_multiple, pnl_manual, recorrido)
+               VALUES (?,?,?,?,?,?,?,?,?)""",
+            (user_id, op_date, session, direction, r_points, result, r_multiple, pnl_manual, recorrido),
         )
 
 
@@ -122,3 +166,25 @@ def mark_event_processed(event_id):
         conn.execute(
             "INSERT OR IGNORE INTO stripe_events (event_id) VALUES (?)", (event_id,)
         )
+
+
+def add_chat_message(user_id, role, content):
+    with get_db() as conn:
+        conn.execute(
+            "INSERT INTO chat_messages (user_id, role, content) VALUES (?,?,?)",
+            (user_id, role, content),
+        )
+
+
+def list_chat_messages(user_id, limit=40):
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT * FROM chat_messages WHERE user_id=? ORDER BY id ASC LIMIT ?",
+            (user_id, limit),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def clear_chat(user_id):
+    with get_db() as conn:
+        conn.execute("DELETE FROM chat_messages WHERE user_id=?", (user_id,))
