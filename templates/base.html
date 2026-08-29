@@ -12,6 +12,7 @@
     <div class="links">
       {% if user %}
         <a href="{{ url_for('dashboard') }}">Bitácora</a>
+        <a href="{{ url_for('asistente') }}">Asistente IA</a>
         <a href="{{ url_for('settings') }}">Configuración</a>
         <a href="{{ url_for('logout') }}">Salir</a>
       {% else %}
