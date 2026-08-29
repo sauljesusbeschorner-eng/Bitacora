@@ -44,6 +44,8 @@ def login_required(view):
 def paid_required(view):
     @functools.wraps(view)
     def wrapped(*args, **kwargs):
+        if os.environ.get("SKIP_PAYWALL", "").lower() == "true":
+            return view(*args, **kwargs)
         if not g.user["has_lifetime_access"]:
             return redirect(url_for("paywall"))
         return view(*args, **kwargs)
@@ -81,6 +83,8 @@ def signup():
         user_id = db.create_user(email, generate_password_hash(password))
         session.clear()
         session["user_id"] = user_id
+        if os.environ.get("SKIP_PAYWALL", "").lower() == "true":
+            return redirect(url_for("dashboard"))
         return redirect(url_for("paywall"))
     return render_template("signup.html")
 
